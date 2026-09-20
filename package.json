@@ -1,0 +1,14 @@
+{
+  "name": "walltap-admin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private admin dashboard for Walltap, deployed separately on Netlify.",
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "netlify build"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0"
+  }
+}

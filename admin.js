@@ -14,13 +14,33 @@ const errEl    = $("auth-err");
 let accessToken = null;
 let isAdmin = false;
 
-async function api(path) {
+async function api(path, retry = true) {
   const res = await fetch(`/.netlify/functions/${path}`, {
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
   });
+  // Supabase access tokens expire ~1h. Refresh once and replay, otherwise a
+  // dashboard left open silently starts 401ing and looks like empty data.
+  if (res.status === 401 && retry && supabase) {
+    const { data } = await supabase.auth.getSession();
+    if (data.session && data.session.access_token !== accessToken) {
+      accessToken = data.session.access_token;
+      return api(path, false);
+    }
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
   return body;
+}
+
+// Every panel load is fire-and-forget; without this a failure became an
+// unhandled rejection and the admin saw stale/empty content with no error.
+function guard(promise, where) {
+  return promise.catch(err => {
+    console.error(where, err);
+    const el = document.querySelector(".panel.active .card");
+    if (el) el.insertAdjacentHTML("afterbegin",
+      `<div class="err-text">${escapeHtml(err.message || "Failed to load.")}</div>`);
+  });
 }
 
 function renderPanel(name, html) {
@@ -32,13 +52,21 @@ function renderPanel(name, html) {
 }
 
 function bars(data, labelKey = "day") {
-  const max = Math.max(1, ...data.map(d => d.count));
-  return `<div class="axis">${data.map(d => `
+  const counts = data.map(d => Number(d.count) || 0);
+  const max = Math.max(1, ...counts);
+  return `<div class="axis">${data.map((d, i) => {
+    // event_type is written straight from the browser (events insert own allows
+    // any authenticated user to set it), so it is untrusted input and MUST be
+    // escaped here — renderPanel assigns this to innerHTML.
+    const raw = String(d[labelKey] ?? "");
+    const shown = labelKey === "day" ? raw.slice(5) : raw;
+    return `
     <div style="flex-basis:40px">
-      <div class="bar" style="height:${Math.round((d.count / max) * 110)}px"
-           title="${d[labelKey]} · ${d.count}"></div>
-      <div class="label">${d[labelKey].slice(5)}</div>
-    </div>`).join("")}</div>`;
+      <div class="bar" style="height:${Math.round((counts[i] / max) * 110)}px"
+           title="${escapeHtml(raw.slice(0, 60))} · ${counts[i]}"></div>
+      <div class="label">${escapeHtml(shown.slice(0, 14))}</div>
+    </div>`;
+  }).join("")}</div>`;
 }
 
 async function loadOverview() {
@@ -97,7 +125,7 @@ async function enterAdmin() {
   deniedEl.style.display = "none";
   authBox.classList.add("hidden");
   appEl.style.display = "block";
-  loadOverview();
+  guard(loadOverview(), "overview");
 }
 
 // Guard: verify is_admin server-side before showing anything privileged.
@@ -163,9 +191,16 @@ document.getElementById("tabs").addEventListener("click", e => {
   const btn = e.target.closest("button[data-panel]");
   if (!btn) return;
   const name = btn.dataset.panel;
-  if (name === "overview") loadOverview();
-  else if (name === "users") loadUsers();
-  else if (name === "messages") loadMessages();
+  if (name === "overview") guard(loadOverview(), name);
+  else if (name === "users") guard(loadUsers(), name);
+  else if (name === "messages") guard(loadMessages(), name);
 });
+
+// Keep accessToken current for the life of the session (see api()'s 401 replay).
+if (supabase) {
+  supabase.auth.onAuthStateChange((_event, session) => {
+    if (session) accessToken = session.access_token;
+  });
+}
 
 checkSession();

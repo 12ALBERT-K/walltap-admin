@@ -1,3 +1,24 @@
 [build]
   publish = "."
   functions = "netlify/functions"
+
+# The main app sets these in server.js; the admin site needs them too. Without a
+# CSP an injected payload runs unrestricted, and without frame-ancestors the
+# admin dashboard can be iframed and clickjacked.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "geolocation=(), camera=(), microphone=()"
+
+# These responses carry every user's email and every message (incl. soft-deleted).
+[[headers]]
+  for = "/.netlify/functions/*"
+  [headers.values]
+    Cache-Control = "no-store"
+
+[functions]
+  node_bundler = "esbuild"

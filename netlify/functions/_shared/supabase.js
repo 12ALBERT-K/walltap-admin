@@ -39,7 +39,7 @@ export async function requireAdmin(event) {
 export function ok(data) {
   return new Response(JSON.stringify(data), {
     status: 200,
-    headers: { "Content-Type": "application/json" }
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
   });
 }
 
@@ -48,6 +48,6 @@ export function fail(err) {
   const message = status === 500 ? "Internal server error." : err.message;
   return new Response(JSON.stringify({ error: message }), {
     status,
-    headers: { "Content-Type": "application/json" }
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
   });
 }

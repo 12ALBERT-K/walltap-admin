@@ -14,9 +14,16 @@ const errEl    = $("auth-err");
 let accessToken = null;
 let isAdmin = false;
 
-async function api(path, retry = true) {
+async function api(path, opts = {}) {
+  const { method = "GET", body = null, retry = true } = opts;
+  const headers = {};
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  if (body) headers["Content-Type"] = "application/json";
+
   const res = await fetch(`/.netlify/functions/${path}`, {
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined
   });
   // Supabase access tokens expire ~1h. Refresh once and replay, otherwise a
   // dashboard left open silently starts 401ing and looks like empty data.
@@ -24,12 +31,12 @@ async function api(path, retry = true) {
     const { data } = await supabase.auth.getSession();
     if (data.session && data.session.access_token !== accessToken) {
       accessToken = data.session.access_token;
-      return api(path, false);
+      return api(path, { method, body, retry: false });
     }
   }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
-  return body;
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload.error || `Error ${res.status}`);
+  return payload;
 }
 
 // Every panel load is fire-and-forget; without this a failure became an
@@ -86,15 +93,80 @@ async function loadUsers() {
   const rows = await api("list-users");
   renderPanel("users", `
     <div class="card"><table>
-      <thead><tr><th>Email</th><th>Username</th><th>Role</th><th>Joined</th></tr></thead>
+      <thead><tr><th>Username</th><th>Role</th><th>Joined</th><th>Account</th><th>Recovery</th></tr></thead>
       <tbody>${rows.map(u => `
         <tr>
-          <td>${escapeHtml(u.email)}</td>
           <td>${escapeHtml(u.username)}</td>
           <td>${u.is_admin ? '<span class="badge admin">admin</span>' : '<span class="badge user">user</span>'}</td>
           <td>${new Date(u.created_at).toLocaleString()}</td>
+          <td class="msg-text">${escapeHtml(u.email)}${isSynthetic(u.email)
+            ? '<br><span class="badge user">username login</span>' : ""}</td>
+          <td><button class="btn-reset" data-uid="${escapeHtml(u.id)}"
+              data-name="${escapeHtml(u.username)}">Reset link</button></td>
         </tr>`).join("")}</tbody>
     </table></div>`);
+  document.querySelectorAll(".btn-reset").forEach(btn =>
+    btn.addEventListener("click", () => issueReset(btn)));
+}
+
+function isSynthetic(email) {
+  return String(email || "").toLowerCase().endsWith("@walltap.local");
+}
+
+// A recovery link is a live credential, so it is shown once, never stored, and
+// the panel closes on the next render.
+async function issueReset(btn) {
+  const uid  = btn.dataset.uid;
+  const name = btn.dataset.name;
+  if (!confirm(`Generate a password-reset link for "${name}"?\n\n`
+    + "The link works once and expires. You will have to send it to them "
+    + "yourself — the app cannot email it.")) return;
+
+  btn.disabled = true;
+  btn.textContent = "Working…";
+  try {
+    const res = await api("send-reset", { method: "POST", body: { userId: uid } });
+    if (!res.actionLink) throw new Error("Supabase returned no link.");
+    showResetResult(name, res);
+  } catch (err) {
+    alert(`Could not create a reset link: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Reset link";
+  }
+}
+
+function showResetResult(name, res) {
+  const note = res.synthetic
+    ? `"${name}" signed up with a username, so there is no inbox. Send this link to them directly.`
+    : `"${name}" has a real email address — Supabase can also send a reset email, but sending the link yourself is more reliable.`;
+  const existing = document.getElementById("reset-result");
+  if (existing) existing.remove();
+
+  const box = document.createElement("div");
+  box.id = "reset-result";
+  box.className = "card";
+  box.innerHTML = `
+    <h3>Reset link for ${escapeHtml(name)}</h3>
+    <p class="note">${escapeHtml(note)}</p>
+    <div class="link-row">
+      <input type="text" class="link-box" readonly value="${escapeHtml(res.actionLink)}" />
+      <button class="btn-copy">Copy</button>
+    </div>`;
+  document.getElementById("users").prepend(box);
+
+  const input = box.querySelector(".link-box");
+  box.querySelector(".btn-copy").addEventListener("click", async (e) => {
+    input.select();
+    try {
+      await navigator.clipboard.writeText(res.actionLink);
+      e.target.textContent = "Copied";
+    } catch {
+      document.execCommand("copy");
+      e.target.textContent = "Copied";
+    }
+    setTimeout(() => { e.target.textContent = "Copy"; }, 1500);
+  });
 }
 
 async function loadMessages() {

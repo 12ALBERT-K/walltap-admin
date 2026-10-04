@@ -10,6 +10,7 @@
       --base0: #839496; --base1: #93a1a1;
       --cyan: #2aa198; --blue: #268bd2; --red: #dc322f; --green: #859900; --yellow: #b58900;
       --font: "Segoe UI", system-ui, sans-serif;
+      --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -49,6 +50,21 @@
     .badge.live { background: rgba(147,161,161,0.15); color: var(--base0); }
     tr.deleted { opacity: 0.65; }
     .msg-text { white-space: pre-wrap; word-break: break-word; }
+    .btn-reset, .btn-copy {
+      background: transparent; color: var(--cyan); border: 1px solid #0f4a57;
+      border-radius: 4px; padding: 0.25rem 0.55rem; font-size: 0.75rem;
+      font-family: var(--font); cursor: pointer; white-space: nowrap;
+    }
+    .btn-reset:hover, .btn-copy:hover { background: rgba(147,161,161,0.12); }
+    .btn-reset:disabled { opacity: 0.5; cursor: default; }
+    #reset-result { margin-bottom: 1rem; }
+    #reset-result .note { font-size: 0.8rem; color: var(--base0); margin: 0 0 0.6rem; }
+    .link-row { display: flex; gap: 0.5rem; align-items: center; }
+    .link-box {
+      flex: 1; min-width: 0; padding: 0.45rem 0.5rem; font-size: 0.75rem;
+      font-family: var(--mono); color: var(--base1); background: var(--base03);
+      border: 1px solid #0f4a57; border-radius: 4px;
+    }
     .axis { display: flex; gap: 2px; align-items: flex-end; height: 120px; }
     .axis .bar {
       flex: 1; background: var(--cyan); border-radius: 3px 3px 0 0; min-width: 6px; position: relative;

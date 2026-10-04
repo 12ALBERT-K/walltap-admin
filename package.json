@@ -6,7 +6,8 @@
   "description": "Private admin dashboard for Walltap, deployed separately on Netlify.",
   "scripts": {
     "dev": "netlify dev",
-    "build": "netlify build"
+    "build": "netlify build",
+    "validate": "node scripts/validate-send-reset.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0"

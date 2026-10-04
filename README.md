@@ -10,8 +10,30 @@ same Supabase project as the chat app.
 
 - **Overview** — user count, message count, active users (30d), posts/day and
   events-by-type charts for the last 30 days.
-- **Users** — every profile with email (via the `admin_profiles` view), username
-  and admin role.
+- **Users** — every profile with username, account type and admin role, plus a
+  **Reset link** button for password recovery (see below).
+
+## Password recovery
+
+Walltap accounts are **username + password** with no email address, so there is
+no self-service reset. `send-reset.js` mints a **single-use recovery link** for
+one user and hands it back to you to pass along however you like.
+
+It does **not** email anything, and it cannot: usernames are mapped onto
+synthetic `@walltap.local` addresses with no inbox. Passwords are bcrypt hashes,
+so there is no forgotten password to recover — issuing a fresh link is the only
+option, and it never means handling anyone's actual password.
+
+- Keyed on `userId`, never on an email from the browser, so it cannot be used to
+  enumerate accounts. Refuses to issue a link for the calling admin's own row.
+- `requireAdmin()` runs first, so this is not a public endpoint.
+- Each issue writes a `password_reset_issued` row to `events`. The link itself
+  is never logged.
+- The link is shown once, in the panel, with a copy button. It is not stored.
+- `CHAT_APP_URL` decides where the link sends the user. It must also be listed
+  under Supabase → Auth → URL Configuration → Redirect URLs, or the link
+  dead-ends on an error page.
+
 - **Messages** — every post including soft-deleted ones (moderation view), with
   a live/deleted badge and the erase timestamp.
 
@@ -57,6 +79,7 @@ Netlify Functions need these env vars:
 | `SUPABASE_URL` | Netlify env var — functions only |
 | `SUPABASE_ANON_KEY` | Netlify env var — functions only (token verification) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Netlify env var — functions only |
+| `CHAT_APP_URL` | Netlify env var — functions only. Public URL of the chat app, used to build recovery links. No trailing slash. |
 | *(anon key + URL for the browser)* | `config.js`, committed in this repo |
 
 For `netlify dev`, export them in your shell (or use `netlify env`). They share
@@ -69,6 +92,7 @@ netlify init          # create the site
 netlify env:set SUPABASE_URL https://your-project-ref.supabase.co
 netlify env:set SUPABASE_ANON_KEY your-anon-key
 netlify env:set SUPABASE_SERVICE_ROLE_KEY your-service-role-key
+netlify env:set CHAT_APP_URL https://your-chat-app.onrender.com
 git push origin main  # once the repo has a remote
 ```
 
@@ -77,8 +101,16 @@ by `npm run provision-admin` **in the chat app repo** (that script does not exis
 in this repository — it lives next to the app's `server.js`).
 
 After deploying, confirm the deployed function list is exactly
-`list-users`, `list-all-messages` and `analytics-summary`. Anything else —
-especially anything starting with `_` — means a stray file got bundled.
+`list-users`, `list-all-messages`, `analytics-summary` and `send-reset`.
+Anything else — especially anything starting with `_` — means a stray file got
+bundled.
+
+## Validating `send-reset`
+
+`npm run validate` exercises the auth gate (no token → 401, non-admin → 403),
+the request validation, and the happy path against the real project, then
+deletes the temporary users it created. Point it at a disposable project — it
+creates and removes real auth users.
 
 ## Known limitations
 

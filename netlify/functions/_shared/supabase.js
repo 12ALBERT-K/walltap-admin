@@ -15,10 +15,36 @@ function httpError(status, message) {
   return err;
 }
 
+// These functions are ESM with a default export, which Netlify runs as
+// Functions v2: the handler receives a web `Request`, whose headers are a
+// `Headers` instance and whose body is a stream. Reading v1 fields
+// (`event.headers.authorization`, `event.httpMethod`, `event.body`) therefore
+// ALWAYS came back undefined and every privileged call 401'd. The helpers
+// below accept either shape, so the code keeps working either way.
+export function getHeader(event, name) {
+  const h = (event && event.headers) || {};
+  if (typeof h.get === "function") return h.get(name) || "";
+  const target = String(name).toLowerCase();
+  for (const k of Object.keys(h)) if (k.toLowerCase() === target) return h[k] || "";
+  return "";
+}
+
+export function getMethod(event) {
+  return String((event && (event.method || event.httpMethod)) || "").toUpperCase();
+}
+
+export async function getJsonBody(event) {
+  if (!event) return {};
+  if (typeof event.json === "function") {
+    try { return await event.json(); } catch { return {}; }
+  }
+  try { return JSON.parse((event && event.body) || "{}"); } catch { return {}; }
+}
+
 // Verifies the caller's JWT and checks is_admin=TRUE server-side.
 // Every privileged function must call this before returning data.
 export async function requireAdmin(event) {
-  const token = (event.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  const token = getHeader(event, "authorization").replace(/^Bearer\s+/i, "");
   if (!token) throw httpError(401, "Authentication required.");
 
   const anon = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);

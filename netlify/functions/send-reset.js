@@ -1,4 +1,4 @@
-import { requireAdmin, ok, fail } from "./_shared/supabase.js";
+import { requireAdmin, ok, fail, getMethod, getJsonBody } from "./_shared/supabase.js";
 
 // Issues a single-use password-reset link for one user.
 //
@@ -21,16 +21,11 @@ function httpError(status, message) {
 
 export default async (event) => {
   try {
-    if (event.httpMethod !== "POST") throw httpError(405, "POST required.");
+    if (getMethod(event) !== "POST") throw httpError(405, "POST required.");
 
     const { user: adminUser, db } = await requireAdmin(event);
 
-    let body;
-    try {
-      body = JSON.parse(event.body || "{}");
-    } catch {
-      throw httpError(400, "Invalid request body.");
-    }
+    const body = await getJsonBody(event);
 
     // Keyed on user id, never on an email from the client: accepting an email
     // would turn this into a user-enumeration oracle for any admin session.

@@ -1,4 +1,10 @@
 // Walltap admin — vanilla JS, no build step.
+// Wrapped in an IIFE, for the same reason public/app.js in the chat app is:
+// the Supabase CDN bundle declares a GLOBAL `var supabase`, and a top-level
+// `const supabase` here is a duplicate declaration → SyntaxError at PARSE time
+// → the entire file is dead (no listeners, login button inert). Scoping the
+// file inside a function keeps its bindings out of the global namespace.
+(function () {
 const SUPABASE_URL = window.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "";
 const supabase = (window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY)
@@ -276,3 +282,4 @@ if (supabase) {
 }
 
 checkSession();
+})();
